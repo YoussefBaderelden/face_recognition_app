@@ -1,0 +1,54 @@
+import 'dart:io';
+import 'package:flutter/material.dart';
+import '../../const/colors.dart';
+
+
+class UpdatingScrean extends StatelessWidget {
+  final File imageFile;
+
+  const UpdatingScrean({super.key, required this.imageFile});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      appBar: AppBar(
+        title: const Text('نتيجة التعرف', style: TextStyle(color: AppColors.darkText)),
+        backgroundColor: AppColors.primary,
+        iconTheme: const IconThemeData(color: AppColors.darkText),
+      ),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: MediaQuery.of(context).size.width,
+              maxHeight: MediaQuery.of(context).size.height * 0.8,
+            ),
+            child: Card(
+              elevation: 4,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: InteractiveViewer(
+                  panEnabled: true,
+                  minScale: 0.5,
+                  maxScale: 3.0,
+                  child: Image.file(imageFile, fit: BoxFit.contain),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () => Navigator.pop(context),
+        backgroundColor: AppColors.primary,
+        foregroundColor: AppColors.darkText,
+        child: const Icon(Icons.arrow_back),
+      ),
+    );
+  }
+}

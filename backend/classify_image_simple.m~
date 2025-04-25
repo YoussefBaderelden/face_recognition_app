@@ -1,0 +1,43 @@
+function classify_image_simple(imagePath)
+    % تحميل المصنف إذا كان غير محمل
+    persistent classifier
+    if isempty(classifier)
+        try
+            load('faceClassifier.mat', 'classifier');
+        catch
+            classifier = [];
+        end
+    end
+
+    % قراءة الصورة
+    img = imread(imagePath);
+    img = imresize(img, [300 300]);
+
+    % كاشف الوجه
+    faceDetector = vision.CascadeObjectDetector();
+    bboxes = step(faceDetector, img);
+
+    if ~isempty(bboxes)
+        % إذا كان هناك مصنف، نستخدمه للتعرف على الوجه
+        if ~isempty(classifier)
+            imgSize = [100 100];
+            for i = 1:size(bboxes,1)
+                face = imcrop(img, bboxes(i,:));
+                faceGray = imresize(rgb2gray(face), imgSize);
+                hog = extractHOGFeatures(faceGray);
+                try
+                    predictedLabel = predict(classifier, hog);
+                    label = char(predictedLabel);
+                catch
+                    label = 'Unknown';
+                end
+                img = insertObjectAnnotation(img, 'rectangle', bboxes(i,:), label);
+            end
+        else
+            img = insertShape(img, 'Rectangle', bboxes, 'LineWidth', 3, 'Color', 'green');
+        end
+    end
+
+    % حفظ الصورة الناتجة
+    save_output_image(imagePath, img);
+end

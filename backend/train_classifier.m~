@@ -1,0 +1,19 @@
+function train_classifier()
+    % تدريب المصنف وحفظه
+    faceData = imageDatastore('Faces', 'IncludeSubfolders', true, 'LabelSource', 'foldernames');
+    imgSize = [100 100];
+    features = [];
+    labels = [];
+
+    for i = 1:numel(faceData.Files)
+        img = readimage(faceData, i);
+        img = imresize(rgb2gray(img), imgSize);
+        hog = extractHOGFeatures(img);
+        features = [features; hog];
+        labels = [labels; faceData.Labels(i)];
+    end
+
+    classifier = fitcecoc(features, labels);
+    save('faceClassifier.mat', 'classifier');
+    disp('تم تدريب النموذج وحفظه.');
+end
