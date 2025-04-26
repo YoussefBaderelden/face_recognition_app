@@ -135,25 +135,26 @@ end
         end
 end
 
-% Custom HOG feature extraction
+% Custom HOG feature extraction (improved for accuracy)
 function hog_features = custom_extractHOGFeatures(img)
-                        % Simple HOG implementation
-% Parameters
-        cell_size = 8;
+                        % Parameters
+cell_size = 8;
 block_size = 2;
 num_bins = 9;
 
 [height, width] = size(img);
 
+% Pad image to handle boundaries
+        padded_img = zeros(height+2, width+2);
+padded_img(2:end-1, 2:end-1) = img;
+
 % Calculate gradients
 gradX = zeros(height, width);
 gradY = zeros(height, width);
-
-% Compute gradients (central difference)
-for y = 2:height-1
-for x = 2:width-1
-gradX(y, x) = double(img(y, x+1)) - double(img(y, x-1));
-gradY(y, x) = double(img(y+1, x)) - double(img(y-1, x));
+for y = 1:height
+for x = 1:width
+gradX(y, x) = double(padded_img(y+1, x+2)) - double(padded_img(y+1, x));
+gradY(y, x) = double(padded_img(y+2, x+1)) - double(padded_img(y, x+1));
 end
         end
 
@@ -173,13 +174,10 @@ for y = 1:cell_size
 for x = 1:cell_size
         img_y = (cell_y-1)*cell_size + y;
 img_x = (cell_x-1)*cell_size + x;
-
 if img_y <= height && img_x <= width
         orient = orientation(img_y, img_x);
 mag = magnitude(img_y, img_x);
-
-% Determine histogram bin
-        bin = min(floor(orient / (180/num_bins)) + 1, num_bins);
+bin = min(floor(orient / (180/num_bins)) + 1, num_bins);
 histograms(cell_y, cell_x, bin) = histograms(cell_y, cell_x, bin) + mag;
 end
         end
@@ -191,7 +189,6 @@ end
 blocks_y = cells_y - block_size + 1;
 blocks_x = cells_x - block_size + 1;
 features_per_block = block_size * block_size * num_bins;
-
 hog_features = zeros(1, blocks_y * blocks_x * features_per_block);
 feature_idx = 1;
 
@@ -203,12 +200,13 @@ for cell_x = block_x:block_x+block_size-1
 block_features = [block_features, reshape(histograms(cell_y, cell_x, :), 1, [])];
 end
         end
-
-% Normalize block
+% Improved normalization with clipping
 block_norm = sqrt(sum(block_features.^2) + 1e-6);
 block_features = block_features / block_norm;
+block_features = min(block_features, 0.2); % Clipping
+        block_norm = sqrt(sum(block_features.^2) + 1e-6);
+block_features = block_features / block_norm;
 
-% Add to feature vector
 hog_features(feature_idx:feature_idx+features_per_block-1) = block_features;
 feature_idx = feature_idx + features_per_block;
 end
@@ -246,9 +244,9 @@ end
         model.predict = @custom_predict;
 end
 
-% Custom binary SVM training (simplified version)
+% Custom binary SVM training (improved with better optimization)
 function binary_model = custom_train_binary_svm(X, y)
-                        % Simplified SVM implementation
+                        % Simplified SVM implementation with improved optimization
 [num_samples, num_features] = size(X);
 
 % Initialize weights
@@ -256,23 +254,36 @@ w = zeros(1, num_features);
 b = 0;
 learning_rate = 0.01;
 lambda = 0.01;  % Regularization parameter
-max_epochs = 100;
+max_epochs = 200;  % Increased epochs for better convergence
+C = 1.0;  % Margin parameter for soft-margin SVM
 
-% Gradient descent optimization
+% Shuffle data to improve convergence
+        indices = randperm(num_samples);
+X = X(indices, :);
+y = y(indices);
+
+% Gradient descent optimization with mini-batches
+        batch_size = 32;
 for epoch = 1:max_epochs
-for i = 1:num_samples
-% Hinge loss gradient
-if y(i) * (dot(w, X(i,:)) + b) < 1
-dw = lambda * w - y(i) * X(i,:);
-db = -y(i);
-else
+% Decay learning rate
+        current_lr = learning_rate / (1 + 0.01 * epoch);
+
+for batch_start = 1:batch_size:num_samples
+        batch_end = min(batch_start + batch_size - 1, num_samples);
 dw = lambda * w;
 db = 0;
+
+% Compute gradients for batch
+for i = batch_start:batch_end
+if y(i) * (dot(w, X(i,:)) + b) < 1
+dw = dw - (C * y(i) * X(i,:)) / batch_size;
+db = db - (C * y(i)) / batch_size;
 end
+        end
 
 % Update weights
-w = w - learning_rate * dw;
-b = b - learning_rate * db;
+w = w - current_lr * dw;
+b = b - current_lr * db;
 end
         end
 

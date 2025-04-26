@@ -67,7 +67,6 @@ fileID = fopen(filepath, 'rb');
 if fileID == -1
 error('Cannot open image file');
 end
-
 % For simplicity, we'll still use imread as creating a full image decoder is complex
 % In a real implementation, this would be replaced with custom JPEG/PNG decoding
 img = imread(filepath);
@@ -123,23 +122,24 @@ end
 end
 
         function hog_features = custom_extractHOGFeatures(img)
-                                % Simple HOG implementation
-% Parameters
-        cell_size = 8;
+                                % Parameters
+cell_size = 8;
 block_size = 2;
 num_bins = 9;
 
 [height, width] = size(img);
 
+% Pad image to handle boundaries
+        padded_img = zeros(height+2, width+2);
+padded_img(2:end-1, 2:end-1) = img;
+
 % Calculate gradients
 gradX = zeros(height, width);
 gradY = zeros(height, width);
-
-% Compute gradients (central difference)
-for y = 2:height-1
-for x = 2:width-1
-gradX(y, x) = double(img(y, x+1)) - double(img(y, x-1));
-gradY(y, x) = double(img(y+1, x)) - double(img(y-1, x));
+for y = 1:height
+for x = 1:width
+gradX(y, x) = double(padded_img(y+1, x+2)) - double(padded_img(y+1, x));
+gradY(y, x) = double(padded_img(y+2, x+1)) - double(padded_img(y, x+1));
 end
         end
 
@@ -159,13 +159,10 @@ for y = 1:cell_size
 for x = 1:cell_size
         img_y = (cell_y-1)*cell_size + y;
 img_x = (cell_x-1)*cell_size + x;
-
 if img_y <= height && img_x <= width
         orient = orientation(img_y, img_x);
 mag = magnitude(img_y, img_x);
-
-% Determine histogram bin
-        bin = min(floor(orient / (180/num_bins)) + 1, num_bins);
+bin = min(floor(orient / (180/num_bins)) + 1, num_bins);
 histograms(cell_y, cell_x, bin) = histograms(cell_y, cell_x, bin) + mag;
 end
         end
@@ -177,7 +174,6 @@ end
 blocks_y = cells_y - block_size + 1;
 blocks_x = cells_x - block_size + 1;
 features_per_block = block_size * block_size * num_bins;
-
 hog_features = zeros(1, blocks_y * blocks_x * features_per_block);
 feature_idx = 1;
 
@@ -189,12 +185,13 @@ for cell_x = block_x:block_x+block_size-1
 block_features = [block_features, reshape(histograms(cell_y, cell_x, :), 1, [])];
 end
         end
-
-% Normalize block
+% Improved normalization with clipping
 block_norm = sqrt(sum(block_features.^2) + 1e-6);
 block_features = block_features / block_norm;
+block_features = min(block_features, 0.2); % Clipping
+        block_norm = sqrt(sum(block_features.^2) + 1e-6);
+block_features = block_features / block_norm;
 
-% Add to feature vector
 hog_features(feature_idx:feature_idx+features_per_block-1) = block_features;
 feature_idx = feature_idx + features_per_block;
 end
@@ -221,53 +218,61 @@ end
         end
 
 function bboxes = custom_face_detector(img)
-                  % For simplicity, we'll implement a very basic skin color-based face detector
-% This is not as robust as Viola-Jones but gives us something to work with
+                  [rows, cols, ~] = size(img);
 
 % Convert to grayscale for edge detection
 gray = custom_rgb2gray(img);
 
-% Convert to YCbCr color space for skin detection (still using RGB)
-[rows, cols, ~] = size(img);
+% Simple edge detection using Sobel-like filters
+edges = zeros(rows, cols);
+for i = 2:rows-1
+for j = 2:cols-1
+gx = double(gray(i-1, j+1)) + 2*double(gray(i, j+1)) + double(gray(i+1, j+1)) - ...
+double(gray(i-1, j-1)) - 2*double(gray(i, j-1)) - double(gray(i+1, j-1));
+gy = double(gray(i-1, j-1)) + 2*double(gray(i-1, j)) + double(gray(i-1, j+1)) - ...
+double(gray(i+1, j-1)) - 2*double(gray(i+1, j)) - double(gray(i+1, j+1));
+edges(i, j) = sqrt(gx^2 + gy^2);
+end
+        end
+edges = edges > 50; % Threshold for edges
 
-% Initialize skin mask
+% Skin color detection in RGB
         skin_mask = false(rows, cols);
-
-% Simple skin color thresholding in RGB
-% This is a very simplified approach
 for i = 1:rows
 for j = 1:cols
         r = double(img(i, j, 1));
 g = double(img(i, j, 2));
 b = double(img(i, j, 3));
-
-% Basic skin color rule in RGB
-if r > 95 && g > 40 && b > 20 && ...
-r > g && r > b && ...
-abs(r - g) > 15 && ...
-r + g + b > 100
+% Improved skin color rule
+if r > 95 && g > 40 && b > 20 && r > g && r > b && abs(r - g) > 15 && r + g + b > 150
 skin_mask(i, j) = true;
 end
         end
 end
 
-% Find connected regions that could be faces
-% Group connected pixels
-        labeled = custom_bwlabel(skin_mask);
+% Combine skin mask and edges
+        combined_mask = skin_mask & edges;
 
-% Extract region properties (area, bounding box)
+% Label connected components
+        labeled = custom_bwlabel(combined_mask);
+
+% Extract region properties
         regions = custom_regionprops(labeled);
 
-% Filter regions based on size
-        min_area = (rows * cols) * 0.005;  % At least 0.5% of image
-max_area = (rows * cols) * 0.5;    % At most 50% of image
-
+% Filter regions based on size and aspect ratio
+min_area = (rows * cols) * 0.01;  % At least 1% of image
+max_area = (rows * cols) * 0.5;   % At most 50% of image
 valid_regions = [];
 for i = 1:length(regions)
 if regions(i).Area > min_area && regions(i).Area < max_area
-        valid_regions = [valid_regions; i];
+        bbox = regions(i).BoundingBox;
+aspect_ratio = bbox(3) / bbox(4); % width / height
+% Typical face aspect ratio is around 0.8 to 1.3
+if aspect_ratio > 0.8 && aspect_ratio < 1.3
+valid_regions = [valid_regions; i];
 end
         end
+end
 
 % Convert region data to bounding boxes
 bboxes = zeros(length(valid_regions), 4);
@@ -280,70 +285,67 @@ end
 function labeled = custom_bwlabel(bw)
                    [rows, cols] = size(bw);
 labeled = zeros(rows, cols);
+current_label = 0;
+equivalence = zeros(1000, 1); % For union-find
 
-% Initialize label counter
-        current_label = 0;
-
-% First pass: assign preliminary labels
+% First pass: assign preliminary labels and build equivalence classes
 for i = 1:rows
 for j = 1:cols
 if bw(i, j)
-% Check neighbors (4-connectivity)
-neighbors = [];
-
-% Top neighbor
+        neighbors = [];
 if i > 1 && labeled(i-1, j) > 0
 neighbors = [neighbors, labeled(i-1, j)];
 end
-
-% Left neighbor
 if j > 1 && labeled(i, j-1) > 0
 neighbors = [neighbors, labeled(i, j-1)];
 end
-
 if isempty(neighbors)
-% No labeled neighbors, assign new label
         current_label = current_label + 1;
-labeled(i, j) = current_label;
+                labeled(i, j) = current_label;
+equivalence(current_label) = current_label;
 else
 % Assign smallest label from neighbors
-labeled(i, j) = min(neighbors);
+        min_label = min(neighbors);
+labeled(i, j) = min_label;
+% Union all neighbor labels
+for k = 1:length(neighbors)
+        root1 = find_root(equivalence, min_label);
+        root2 = find_root(equivalence, neighbors(k));
+if root1 ~= root2
+equivalence(root2) = root1;
+end
+        end
 end
         end
 end
         end
 
-% Second pass: merge equivalences (simplified)
-% This is a very simplified version without proper equivalence tracking
+% Second pass: resolve equivalence classes
 for i = 1:rows
 for j = 1:cols
 if labeled(i, j) > 0
-% Check neighbors again for lower labels
-if i > 1 && labeled(i-1, j) > 0
-labeled(i, j) = min(labeled(i, j), labeled(i-1, j));
-end
-
-if j > 1 && labeled(i, j-1) > 0
-labeled(i, j) = min(labeled(i, j), labeled(i, j-1));
-end
-
-if i < rows && labeled(i+1, j) > 0
-labeled(i, j) = min(labeled(i, j), labeled(i+1, j));
-end
-
-if j < cols && labeled(i, j+1) > 0
-labeled(i, j) = min(labeled(i, j), labeled(i, j+1));
+labeled(i, j) = find_root(equivalence, labeled(i, j));
 end
         end
 end
-        end
 
 % Re-label components to ensure consecutive labels
-unique_labels = unique(labeled);
-unique_labels = unique_labels(unique_labels > 0);
-
+unique_labels = unique(labeled(labeled > 0));
 for i = 1:length(unique_labels)
 labeled(labeled == unique_labels(i)) = i;
+end
+        end
+
+function root = find_root(equivalence, label)
+root = label;
+while equivalence(root) ~= root
+        root = equivalence(root);
+end
+% Path compression
+while equivalence(label) ~= root
+        next = equivalence(label);
+equivalence(label) = root;
+label = next;
 end
         end
 
@@ -432,20 +434,6 @@ end
         end
 end
 
-% Check if color is string and convert
-if ischar(color)
-switch lower(color)
-case 'red'
-color = [255, 0, 0];
-case 'green'
-color = [0, 255, 0];
-case 'blue'
-color = [0, 0, 255];
-otherwise
-        color = [255, 0, 0];
-end
-        end
-
 % Convert to uint8 if necessary
 if max(color) <= 1
 color = uint8(color * 255);
@@ -471,7 +459,6 @@ result(y+l-1, j, 1) = color(1);
 result(y+l-1, j, 2) = color(2);
 result(y+l-1, j, 3) = color(3);
 end
-
 % Bottom line
 if y+h-l > 0 && y+h-l <= height
 result(y+h-l, j, 1) = color(1);
@@ -490,7 +477,6 @@ result(j, x+l-1, 1) = color(1);
 result(j, x+l-1, 2) = color(2);
 result(j, x+l-1, 3) = color(3);
 end
-
 % Right line
 if x+w-l > 0 && x+w-l <= width
 result(j, x+w-l, 1) = color(1);

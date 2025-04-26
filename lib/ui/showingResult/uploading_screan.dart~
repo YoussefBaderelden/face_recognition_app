@@ -17,7 +17,7 @@ class UploadingScrean extends StatefulWidget {
 class _UploadingScreanState extends State<UploadingScrean> {
   final ImagePicker _picker = ImagePicker();
   bool _isLoading = false;
-  String _serverUrl = 'http://192.168.140.249:5000';
+  String _serverUrl = 'http://192.168.140.31:5000';
   String _trainingMessage = '';
   TextEditingController _nameController = TextEditingController();
 

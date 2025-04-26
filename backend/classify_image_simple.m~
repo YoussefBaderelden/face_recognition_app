@@ -62,8 +62,7 @@ save_output_image(imagePath, img);
 disp('Processing completed');
 end
 
-% Custom image reading function
-function img = custom_imread(filepath)
+        function img = custom_imread(filepath)
 fileID = fopen(filepath, 'rb');
 if fileID == -1
 error('Cannot open image file');
@@ -75,7 +74,6 @@ img = imread(filepath);
 fclose(fileID);
 end
 
-% Custom RGB to grayscale conversion
         function gray = custom_rgb2gray(rgb)
 if size(rgb, 3) == 3
 % Standard RGB to grayscale formula: 0.2989 * R + 0.5870 * G + 0.1140 * B
@@ -86,7 +84,6 @@ gray = rgb; % Already grayscale
 end
         end
 
-% Custom image resize function
 function resized = custom_resize(img, new_size)
                    [orig_height, orig_width, channels] = size(img);
 
@@ -125,9 +122,8 @@ end
         end
 end
 
-% Custom HOG feature extraction
-function hog_features = custom_extractHOGFeatures(img)
-                        % Simple HOG implementation
+        function hog_features = custom_extractHOGFeatures(img)
+                                % Simple HOG implementation
 % Parameters
         cell_size = 8;
 block_size = 2;
@@ -205,8 +201,7 @@ end
         end
 end
 
-% Custom image crop function
-function cropped = custom_imcrop(img, bbox)
+        function cropped = custom_imcrop(img, bbox)
 x = max(1, round(bbox(1)));
 y = max(1, round(bbox(2)));
 width = round(bbox(3));
@@ -225,7 +220,6 @@ cropped = img(y:y_end, x:x_end, :);
 end
         end
 
-% Custom face detector implementation (Viola-Jones algorithm simplified)
 function bboxes = custom_face_detector(img)
                   % For simplicity, we'll implement a very basic skin color-based face detector
 % This is not as robust as Viola-Jones but gives us something to work with
@@ -283,9 +277,8 @@ for i = 1:length(valid_regions)
 end
         end
 
-% Custom connected components labeling algorithm
-        function labeled = custom_bwlabel(bw)
-                           [rows, cols] = size(bw);
+function labeled = custom_bwlabel(bw)
+                   [rows, cols] = size(bw);
 labeled = zeros(rows, cols);
 
 % Initialize label counter
@@ -354,7 +347,6 @@ labeled(labeled == unique_labels(i)) = i;
 end
         end
 
-% Custom region properties extraction
 function regions = custom_regionprops(labeled)
 max_label = max(max(labeled));
 regions = struct('Area', {}, 'BoundingBox', {});
@@ -381,8 +373,7 @@ end
         end
 end
 
-% Custom function to insert object annotations on image
-function annotated = custom_insertObjectAnnotation(img, shape, bbox, label)
+        function annotated = custom_insertObjectAnnotation(img, shape, bbox, label)
 annotated = img;
 
 % Draw rectangle
@@ -412,7 +403,6 @@ end
 annotated = insertText(annotated, [x, y], label, 'BoxOpacity', 0, 'TextColor', 'black');
 end
 
-% Custom function to insert shapes on image
         function result = custom_insertShape(img, shape, boxes, varargin)
 result = img;
 [height, width, ~] = size(img);
@@ -502,3 +492,13 @@ result(j, x+l-1, 3) = color(3);
 end
 
 % Right line
+if x+w-l > 0 && x+w-l <= width
+result(j, x+w-l, 1) = color(1);
+result(j, x+w-l, 2) = color(2);
+result(j, x+w-l, 3) = color(3);
+end
+        end
+end
+        end
+end
+        end
